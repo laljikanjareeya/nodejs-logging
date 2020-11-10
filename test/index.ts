@@ -479,13 +479,13 @@ describe('Logging', () => {
 
     it('should exec without options', async () => {
       logging.loggingService.listLogEntries = async (
-        reqOpts: {},
+        reqOpts: GetEntriesRequest,
         gaxOpts: {}
       ) => {
-        assert.deepStrictEqual(reqOpts, {
-          orderBy: 'timestamp desc',
-          resourceNames: ['projects/' + logging.projectId],
-        });
+        assert.strictEqual(reqOpts.orderBy, 'timestamp desc');
+        assert.deepStrictEqual(reqOpts.resourceNames, [
+          'projects/' + logging.projectId,
+        ]);
         assert.deepStrictEqual(gaxOpts, {
           autoPaginate: undefined,
         });
@@ -499,17 +499,14 @@ describe('Logging', () => {
       const options = {filter: 'test'};
 
       logging.loggingService.listLogEntries = async (
-        reqOpts: {},
+        reqOpts: GetEntriesRequest,
         gaxOpts: {}
       ) => {
-        assert.deepStrictEqual(
-          reqOpts,
-          extend(options, {
-            filter: 'test',
-            orderBy: 'timestamp desc',
-            resourceNames: ['projects/' + logging.projectId],
-          })
-        );
+        assert.match(reqOpts.filter!, new RegExp('test AND timestamp>= '));
+        assert.strictEqual(reqOpts.orderBy, 'timestamp desc');
+        assert.deepStrictEqual(reqOpts.resourceNames, [
+          'projects/' + logging.projectId,
+        ]);
 
         assert.deepStrictEqual(gaxOpts, {
           autoPaginate: undefined,
@@ -564,15 +561,63 @@ describe('Logging', () => {
         reqOpts: any,
         gaxOpts: {}
       ) => {
-        assert.deepStrictEqual(reqOpts, {
-          a: 'b',
-          c: 'd',
-          orderBy: 'timestamp desc',
-          resourceNames: ['projects/' + logging.projectId],
-        });
+        assert.strictEqual(reqOpts.a, 'b');
+        assert.strictEqual(reqOpts.c, 'd');
+        assert.strictEqual(reqOpts.orderBy, 'timestamp desc');
+        assert.deepStrictEqual(reqOpts.resourceNames, [
+          'projects/' + logging.projectId,
+        ]);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         assert.strictEqual((reqOpts as any).gaxOptions, undefined);
         assert.deepStrictEqual(gaxOpts, options.gaxOptions);
+        return [[]];
+      };
+
+      await logging.getEntries(options);
+    });
+
+    it('should add default 24 hours timestamp filter', async () => {
+      const options = {};
+
+      logging.loggingService.listLogEntries = async (
+        reqOpts: GetEntriesRequest
+      ) => {
+        assert.match(reqOpts.filter!, new RegExp('timestamp>= '));
+        const dateString = reqOpts
+          .filter!.replace('timestamp>= ', '')
+          .replace(/"/g, '');
+        const yesterday = new Date(dateString);
+        const hours = (new Date().getTime() - yesterday.getTime()) / 36e5;
+        assert.ok(hours < 24.001);
+        return [[]];
+      };
+
+      await logging.getEntries(options);
+    });
+
+    it('should override user provided timestamp filter over default', async () => {
+      const filter = `timestamp > "${new Date().toISOString()}"`;
+      const options = {filter};
+
+      logging.loggingService.listLogEntries = async (
+        reqOpts: GetEntriesRequest
+      ) => {
+        assert.strictEqual(reqOpts.filter!, filter);
+
+        return [[]];
+      };
+
+      await logging.getEntries(options);
+    });
+
+    it('should append 24 hour timestamp filter to input string', async () => {
+      const filter = 'resource.type = "gce_instance"';
+      const options = {filter};
+
+      logging.loggingService.listLogEntries = async (
+        reqOpts: GetEntriesRequest
+      ) => {
+        assert.match(reqOpts.filter!, new RegExp(`${filter} AND timestamp>= `));
         return [[]];
       };
 

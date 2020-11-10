@@ -572,6 +572,17 @@ class Logging {
       },
       options!.gaxOptions
     );
+
+    const oneDayAgo = new Date();
+    oneDayAgo.setHours(oneDayAgo.getHours() - 24);
+    const defaultTimeRangeFilter = `timestamp>= "${oneDayAgo.toISOString()}"`;
+
+    if (!reqOpts.filter) {
+      reqOpts.filter = defaultTimeRangeFilter;
+    } else if (reqOpts.filter.toLowerCase().indexOf('timestamp') < 0) {
+      reqOpts.filter = `${reqOpts.filter} AND ${defaultTimeRangeFilter}`;
+    }
+
     const resp = await this.loggingService.listLogEntries(reqOpts, gaxOptions);
     const [entries] = resp;
     if (entries) {
